@@ -29,6 +29,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.learnkafka.libraryevents.consumer.entity.Book;
 import com.learnkafka.libraryevents.consumer.entity.LibraryEvent;
+import com.learnkafka.libraryevents.consumer.entity.LibraryEventType;
 import com.learnkafka.libraryevents.consumer.jpa.LibraryEventRepository;
 import com.learnkafka.libraryevents.consumer.service.LibraryEventService;
 
@@ -62,14 +63,14 @@ public class LibraryEventsConsumerIntTest {
 	private LibraryEventService libraryEventsService;
 	
 	@BeforeEach
-	private void setUp() {
+	void setUp() {
 		for (MessageListenerContainer messageListenerContainer : endpointRegistry.getListenerContainers()) {
 			ContainerTestUtils.waitForAssignment(messageListenerContainer, embeddedKafkaBroker.getPartitionsPerTopic());
 		}
 	}
 	
 	@AfterEach
-	private void tearDown() {
+	void tearDown() {
 		libraryEventRepository.deleteAll();
 	}
 	
@@ -77,7 +78,7 @@ public class LibraryEventsConsumerIntTest {
 	public void postNewLibraryEvent() throws JsonProcessingException, InterruptedException, ExecutionException {
 		// given
 		Book book = Book.builder().bookId(123).bookName("Kafka using Spring Boot").bookAuthor("Dilip").build();
-		LibraryEvent libraryEvent = LibraryEvent.builder().libraryEventId(null).book(book).build();
+		LibraryEvent libraryEvent = LibraryEvent.builder().libraryEventId(null).libraryEventType(LibraryEventType.NEW).book(book).build();
 
 		String json = objectMapper.writeValueAsString(libraryEvent);
 		kafkaTemplate.sendDefault(json).get();
