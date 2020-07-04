@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -75,7 +76,7 @@ public class LibraryEventsConsumerIntTest {
 	}
 	
 	@Test
-	public void postNewLibraryEvent() throws JsonProcessingException, InterruptedException, ExecutionException {
+	public void publishNewLibraryEvent() throws JsonProcessingException, InterruptedException, ExecutionException {
 		// given
 		Book book = Book.builder().bookId(123).bookName("Kafka using Spring Boot").bookAuthor("Dilip").build();
 		LibraryEvent libraryEvent = LibraryEvent.builder().libraryEventId(null).libraryEventType(LibraryEventType.NEW).book(book).build();
@@ -91,6 +92,80 @@ public class LibraryEventsConsumerIntTest {
 		verify(libraryEventsConsumer, times(1)).onMessage(isA(ConsumerRecord.class));
 		verify(libraryEventsService, times(1)).processLibraryEvent(isA(ConsumerRecord.class));
 		assertThat(libraryEventRepository.findAll()).hasSize(1);
+		LibraryEvent created = libraryEventRepository.findAll().iterator().next();
+		assertThat(created.getLibraryEventId()).isNotNull();
+		assertThat(created.getLibraryEventType()).isEqualTo(LibraryEventType.NEW);
+		assertThat(created.getBook().getBookName()).isEqualTo("Kafka using Spring Boot");
+		
 	}
 
+	@Test
+	public void publishUpdateLibraryEvent() throws JsonProcessingException, InterruptedException, ExecutionException {
+		// given
+		Book book = Book.builder().bookId(123).bookName("Kafka using Spring Boot").bookAuthor("Dilip").build();
+		LibraryEvent libraryEvent = LibraryEvent.builder().libraryEventId(12).libraryEventType(LibraryEventType.NEW).book(book).build();
+		libraryEventRepository.save(libraryEvent);
+		
+		Book updatedBook = Book.builder().bookId(123).bookName("Kafka using Spring Boot X").bookAuthor("Dilip").build();
+		LibraryEvent updateLibraryEvent = LibraryEvent.builder().libraryEventId(12).libraryEventType(LibraryEventType.UPDATE).book(updatedBook).build();
+		
+		
+		String json = objectMapper.writeValueAsString(updateLibraryEvent);
+		kafkaTemplate.sendDefault(json).get();
+		
+		// when
+		CountDownLatch latch = new CountDownLatch(1);
+		latch.await(3, TimeUnit.SECONDS);
+		
+		// then
+		verify(libraryEventsConsumer, times(1)).onMessage(isA(ConsumerRecord.class));
+		verify(libraryEventsService, times(1)).processLibraryEvent(isA(ConsumerRecord.class));
+
+		assertThat(libraryEventRepository.findById(12)).isEqualTo(Optional.empty());
+	}
+
+	@Test
+	public void publishUpdateLibraryEventWithNonExistingId() throws JsonProcessingException, InterruptedException, ExecutionException {
+		// given
+		Book updatedBook = Book.builder().bookId(123).bookName("Kafka using Spring Boot X").bookAuthor("Dilip").build();
+		LibraryEvent updateLibraryEvent = LibraryEvent.builder().libraryEventId(12).libraryEventType(LibraryEventType.UPDATE).book(updatedBook).build();
+		
+		
+		String json = objectMapper.writeValueAsString(updateLibraryEvent);
+		kafkaTemplate.sendDefault(json).get();
+		
+		// when
+		CountDownLatch latch = new CountDownLatch(1);
+		latch.await(3, TimeUnit.SECONDS);
+		
+		// then
+		verify(libraryEventsConsumer, times(1)).onMessage(isA(ConsumerRecord.class));
+		verify(libraryEventsConsumer).onMessage(isA(ConsumerRecord.class));
+		verify(libraryEventsService, times(1)).processLibraryEvent(isA(ConsumerRecord.class));
+
+		assertThat(libraryEventRepository.findAll()).describedAs("Library event should not be stored").hasSize(0);
+		assertThat(libraryEventRepository.findById(12)).describedAs("Library event should not be stored").isEqualTo(Optional.empty());
+	}
+
+	@Test
+	public void publishUpdateLibraryEventWithNullId() throws JsonProcessingException, InterruptedException, ExecutionException {
+		// given
+		Book updatedBook = Book.builder().bookId(123).bookName("Kafka using Spring Boot X").bookAuthor("Dilip").build();
+		LibraryEvent updateLibraryEvent = LibraryEvent.builder().libraryEventId(null).libraryEventType(LibraryEventType.UPDATE).book(updatedBook).build();
+		
+		
+		String json = objectMapper.writeValueAsString(updateLibraryEvent);
+		kafkaTemplate.sendDefault(json).get();
+		
+		// when
+		CountDownLatch latch = new CountDownLatch(1);
+		latch.await(3, TimeUnit.SECONDS);
+		
+		// then
+		verify(libraryEventsConsumer, times(3)).onMessage(isA(ConsumerRecord.class));
+		verify(libraryEventsService, times(3)).processLibraryEvent(isA(ConsumerRecord.class));
+		assertThat(libraryEventRepository.findAll()).describedAs("Library event should not be stored").hasSize(0);
+	}
+
+	
 }
